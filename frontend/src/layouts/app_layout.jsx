@@ -28,7 +28,10 @@ export default function AppLayout() {
           background: "rgba(2,6,23,0.35)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div
+          onClick={() => navigate("/")}
+          style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}
+        >
           <div
             style={{
               width: 34,
@@ -65,32 +68,20 @@ export default function AppLayout() {
       <main
         style={{
           flex: 1,
-          overflow: "hidden",
+          overflowY: "auto",
           padding: "24px",
+          display: "flex",
+          justifyContent: "center",
         }}
       >
-        {/* Stable vertical positioning wrapper */}
         <div
           style={{
-            height: "100%",
-            width: "100%",
+            width: "min(1200px, 100%)",
             display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
-            paddingTop: "100px", // ✅ THIS is the controlled push-down
-            boxSizing: "border-box",
+            flexDirection: "column",
           }}
         >
-          {/* Content container */}
-          <div
-            style={{
-              width: "min(1200px, 100%)",
-              height: "100%",
-              display: "flex",
-            }}
-          >
-            <Outlet />
-          </div>
+          <Outlet />
         </div>
       </main>
     </div>

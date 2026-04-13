@@ -129,6 +129,13 @@ export default function Chat() {
     if (!q || isAsking) return;
     setQuestion("");
     addMessage({ role: "user", text: q });
+
+    // Auto-rename chat from first question if still default
+    if (activeChat?.name === "New Chat") {
+      const name = q.length > 40 ? q.slice(0, 38).trimEnd() + "…" : q;
+      updateActiveChat({ name });
+    }
+
     setIsAsking(true);
 
     try {
@@ -163,6 +170,14 @@ export default function Chat() {
     setState((prev) => ({ ...prev, activeChatId: id }));
   };
 
+  const renameChat = (id, name) => {
+    if (!name.trim()) return;
+    setState((prev) => ({
+      ...prev,
+      chats: prev.chats.map((c) => c.id === id ? { ...c, name: name.trim() } : c),
+    }));
+  };
+
   const deleteChat = async (id, e) => {
     e.stopPropagation();
     try { await api(`/chats/${id}`, { method: "DELETE" }); } catch {}
@@ -180,7 +195,7 @@ export default function Chat() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: "flex", height: "100%", width: "100%", gap: 16 }}>
+    <div style={{ display: "flex", height: "calc(100vh - 120px)", width: "100%", gap: 16 }}>
 
       {/* Sidebar */}
       <div style={{
@@ -196,31 +211,14 @@ export default function Chat() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
           {state.chats.map((c) => (
-            <div
+            <ChatItem
               key={c.id}
-              onClick={() => switchChat(c.id)}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                cursor: "pointer",
-                background: c.id === state.activeChatId ? "rgba(56,189,248,0.1)" : "transparent",
-                border: c.id === state.activeChatId ? "1px solid rgba(56,189,248,0.25)" : "1px solid transparent",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 6,
-              }}
-            >
-              <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.85 }}>
-                {c.name}
-              </span>
-              <button
-                onClick={(e) => deleteChat(c.id, e)}
-                style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 14, lineHeight: 1, flexShrink: 0 }}
-              >
-                ×
-              </button>
-            </div>
+              chat={c}
+              isActive={c.id === state.activeChatId}
+              onSelect={() => switchChat(c.id)}
+              onRename={(name) => renameChat(c.id, name)}
+              onDelete={(e) => deleteChat(c.id, e)}
+            />
           ))}
         </div>
       </div>
@@ -250,7 +248,7 @@ export default function Chat() {
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".py,.js,.ts,.jsx,.tsx,.java"
+            accept=".py,.js,.ts,.jsx,.tsx,.java,.c,.cpp,.cc,.cxx,.h,.hpp,.rb,.go,.rs,.swift,.kt,.kts,.cs,.php,.scala,.sc,.dart,.lua,.pl,.pm,.sh,.bash,.ex,.exs,.r"
             style={{ display: "none" }}
             onChange={(e) => handleFiles(e.target.files)}
           />
@@ -266,7 +264,7 @@ export default function Chat() {
           ) : (
             <div>
               <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 3 }}>Drop code files here, or click to browse</div>
-              <div style={{ fontSize: 11, opacity: 0.3 }}>Supports .py · .js · .ts · .jsx · .tsx · .java</div>
+              <div style={{ fontSize: 11, opacity: 0.3 }}>Python · JS · TS · Java · Go · C · C++ · Rust · Swift · Kotlin · and more</div>
             </div>
           )}
         </div>
@@ -352,6 +350,136 @@ export default function Chat() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ChatItem({ chat, isActive, onSelect, onRename, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [menu, setMenu] = useState(null); // {x, y} or null
+  const [confirming, setConfirming] = useState(false);
+  const [draft, setDraft] = useState(chat.name);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (editing) {
+      setDraft(chat.name);
+      setTimeout(() => inputRef.current?.select(), 0);
+    }
+  }, [editing]);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menu]);
+
+  const commit = () => { onRename(draft); setEditing(false); };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") commit();
+    if (e.key === "Escape") setEditing(false);
+    e.stopPropagation();
+  };
+
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY });
+    setConfirming(false);
+  };
+
+  return (
+    <>
+      <div
+        onClick={() => { if (!editing) onSelect(); }}
+        onContextMenu={handleContextMenu}
+        style={{
+          padding: "8px 10px", borderRadius: 8, cursor: "pointer",
+          background: isActive ? "rgba(56,189,248,0.1)" : "transparent",
+          border: isActive ? "1px solid rgba(56,189,248,0.25)" : "1px solid transparent",
+          display: "flex", alignItems: "center", gap: 6,
+        }}
+      >
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              flex: 1, background: "#0f172a", border: "1px solid #38bdf8",
+              borderRadius: 4, color: "white", padding: "2px 6px",
+              fontSize: 13, outline: "none",
+            }}
+          />
+        ) : (
+          <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.85, flex: 1 }}>
+            {chat.name}
+          </span>
+        )}
+      </div>
+
+      {menu && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed", top: menu.y, left: menu.x, zIndex: 1000,
+            background: "#1e293b", border: "1px solid #334155", borderRadius: 8,
+            padding: 4, minWidth: 140, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          }}
+        >
+          {!confirming ? (
+            <>
+              <ContextMenuItem onClick={() => { setMenu(null); setEditing(true); }}>
+                Rename
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => setConfirming(true)} danger>
+                Delete
+              </ContextMenuItem>
+            </>
+          ) : (
+            <div style={{ padding: "8px 10px" }}>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Delete this chat?</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={(e) => { onDelete(e); setMenu(null); setConfirming(false); }}
+                  style={{ flex: 1, background: "#ef4444", border: "none", color: "white", cursor: "pointer", fontSize: 12, borderRadius: 5, padding: "5px 0" }}
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => setConfirming(false)}
+                  style={{ flex: 1, background: "none", border: "1px solid #334155", color: "#94a3b8", cursor: "pointer", fontSize: 12, borderRadius: 5, padding: "5px 0" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ContextMenuItem({ onClick, danger, children }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        padding: "7px 12px", borderRadius: 5, fontSize: 13, cursor: "pointer",
+        color: danger ? "#f87171" : "white",
+        background: hovered ? "rgba(255,255,255,0.06)" : "transparent",
+      }}
+    >
+      {children}
     </div>
   );
 }
